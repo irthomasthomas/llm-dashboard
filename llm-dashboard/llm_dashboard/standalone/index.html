@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Dashboard</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- DateRangePicker -->
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .card {
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .card-header {
+            background-color: #4a6fa5;
+            color: white;
+            font-weight: bold;
+            border-radius: 8px 8px 0 0 !important;
+        }
+        .filters {
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .chart-container {
+            height: 300px;
+            position: relative;
+        }
+        .stat-card {
+            text-align: center;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            background-color: white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .stat-card h3 {
+            font-size: 2.2rem;
+            font-weight: bold;
+            margin: 10px 0;
+            color: #4a6fa5;
+        }
+        .stat-card p {
+            font-size: 1.1rem;
+            color: #6c757d;
+            margin: 0;
+        }
+        table {
+            font-size: 0.9rem;
+        }
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .loading-content {
+            text-align: center;
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
+        }
+        .daterangepicker {
+            z-index: 10000 !important;
+        }
+        .daily-chart-container {
+            height: 400px;
+            position: relative;
+            margin-bottom: 30px;
+        }
+        .nav-pills .nav-link.active {
+            background-color: #4a6fa5;
+        }
+        #errorAlert {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            max-width: 400px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- Header -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <h1 class="text-center text-primary">LLM Dashboard</h1>
+                <p class="text-center text-muted">Dynamic analysis of token usage and costs across different models</p>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="row filters">
+            <div class="col-md-5 mb-3">
+                <label for="dateRangePicker" class="form-label">Date Range</label>
+                <input type="text" class="form-control" id="dateRangePicker" placeholder="Select date range">
+            </div>
+            <div class="col-md-4 mb-3">
+                <label for="modelFilter" class="form-label">Model</label>
+                <select class="form-select" id="modelFilter">
+                    <option value="all">All Models</option>
+                </select>
+            </div>
+            <div class="col-md-3 mb-3 d-flex align-items-end">
+                <button class="btn btn-primary w-100" id="applyFilters">Apply Filters</button>
+            </div>
+        </div>
+
+        <!-- Summary Stats -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <p>Total Requests</p>
+                    <h3 id="totalRequests">0</h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <p>Total Tokens</p>
+                    <h3 id="totalTokens">0</h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <p>Total Cost</p>
+                    <h3 id="totalCost">$0.00</h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <p>Avg. Cost per Request</p>
+                    <h3 id="avgCost">$0.00</h3>
+                </div>
+            </div>
+        </div>
+
+        <!-- Daily Trends Chart -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">Daily Trends</div>
+                    <div class="card-body">
+                        <ul class="nav nav-pills mb-3" id="dailyChartTab" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="tokens-tab" data-bs-toggle="pill" data-bs-target="#tokens" type="button" role="tab" aria-controls="tokens" aria-selected="true">Token Usage</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="costs-tab" data-bs-toggle="pill" data-bs-target="#costs" type="button" role="tab" aria-controls="costs" aria-selected="false">Costs</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="requests-tab" data-bs-toggle="pill" data-bs-target="#requests" type="button" role="tab" aria-controls="requests" aria-selected="false">Requests</button>
+                            </li>
+                        </ul>
+                        <div class="tab-content" id="dailyChartTabContent">
+                            <div class="tab-pane fade show active" id="tokens" role="tabpanel" aria-labelledby="tokens-tab">
+                                <div class="daily-chart-container">
+                                    <canvas id="dailyTokenChart"></canvas>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="costs" role="tabpanel" aria-labelledby="costs-tab">
+                                <div class="daily-chart-container">
+                                    <canvas id="dailyCostChart"></canvas>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="requests" role="tabpanel" aria-labelledby="requests-tab">
+                                <div class="daily-chart-container">
+                                    <canvas id="dailyRequestChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="row">
+            <!-- Token Usage by Model -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">Token Usage by Model</div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="tokenUsageChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cost by Model -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">Cost by Model</div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="costChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Token Distribution -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">Token Distribution (Prompt vs Completion)</div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="tokenDistributionChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cost Efficiency -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">Cost per 1K Tokens by Model</div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="costEfficiencyChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- High Cost Requests -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">Top 10 Highest Cost Requests</div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover" id="highCostTable">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Model</th>
+                                        <th>Prompt Tokens</th>
+                                        <th>Completion Tokens</th>
+                                        <th>Total Tokens</th>
+                                        <th>Cost ($)</th>
+                                        <th>Date & Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="highCostTableBody">
+                                    <!-- Table data will be dynamically populated -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Table -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">Model Summary</div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover" id="dataTable">
+                                <thead>
+                                    <tr>
+                                        <th>Model</th>
+                                        <th>Requests</th>
+                                        <th>Prompt Tokens</th>
+                                        <th>Completion Tokens</th>
+                                        <th>Total Tokens</th>
+                                        <th>Total Cost ($)</th>
+                                        <th>Avg Cost/Request ($)</th>
+                                        <th>Cost per 1K Tokens ($)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tableBody">
+                                    <!-- Table data will be dynamically populated -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Alert -->
+    <div class="alert alert-danger alert-dismissible fade" role="alert" id="errorAlert">
+        <div id="errorMessage"></div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading" id="loadingOverlay">
+        <div class="loading-content">
+            <div class="spinner-border text-primary mb-3" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <h5 id="loadingMessage">Loading Data...</h5>
+        </div>
+    </div>
+
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- jQuery (required for DateRangePicker) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- Moment.js (required for DateRangePicker) -->
+    <script src="https://cdn.jsdelivr.net/momentjs/latest/moment.min.js"></script>
+    <!-- DateRangePicker -->
+    <script src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
+    <!-- Our Application Code -->
+    <script src="analyzer.js"></script>
+</body>
+</html>
