@@ -471,536 +471,409 @@
     <script src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
     
     <script>
-        // Charts instances
+        // Charts instances (declare globally)
         let tokenUsageChart, costChart, tokenDistributionChart, costEfficiencyChart;
         let dailyTokenChart, dailyCostChart, dailyRequestChart;
         
-        // DOM elements
-        const dateRangePicker = document.getElementById('dateRangePicker');
-        const modelFilter = document.getElementById('modelFilter');
-        const applyFiltersBtn = document.getElementById('applyFilters');
-        const loadingOverlay = document.getElementById('loadingOverlay');
-        const loadingMessage = document.getElementById('loadingMessage');
-        const errorAlert = document.getElementById('errorAlert');
-        const errorMessage = document.getElementById('errorMessage');
+        // DOM elements (declare globally)
+        let dateRangePicker, modelFilter, applyFiltersBtn, loadingOverlay, loadingMessage, errorAlert, errorMessage;
+        let totalRequestsEl, totalTokensEl, totalCostEl, avgCostEl;
+        let tableBody, highCostTableBody;
         
-        // Stats elements
-        const totalRequestsEl = document.getElementById('totalRequests');
-        const totalTokensEl = document.getElementById('totalTokens');
-        const totalCostEl = document.getElementById('totalCost');
-        const avgCostEl = document.getElementById('avgCost');
-        
-        // Table bodies
-        const tableBody = document.getElementById('tableBody');
-        const highCostTableBody = document.getElementById('highCostTableBody');
-
-        // Date range for filtering
+        // Date range for filtering (declare globally)
         let startDate = moment().subtract(7, 'days').format('YYYY-MM-DD');
         let endDate = moment().format('YYYY-MM-DD');
 
-        // Initialize DateRangePicker
-        // Original initDateRangePicker replaced
-async function initDateRangePicker() {
-            showLoading('Loading available date range...');
-            
-            // First fetch available date range from API
-            fetch('/api/date-range')
-                .then(response => response.json())
-                .then(data => {
-                    hideLoading();
-                    
-                    if (data.success) {
-                        const minDate = data.min_date ? moment(data.min_date) : moment().subtract(30, 'days');
-                        const maxDate = data.max_date ? moment(data.max_date) : moment();
-                        
-                        // Set default selection to last 7 days or available range if shorter
-                        startDate = moment(maxDate).subtract(7, 'days').isBefore(minDate) 
-                            ? minDate.format('YYYY-MM-DD')
-                            : moment(maxDate).subtract(7, 'days').format('YYYY-MM-DD');
-                        endDate = maxDate.format('YYYY-MM-DD');
-                        
-                        // Initialize daterangepicker
-                        $(dateRangePicker).daterangepicker({
-                            autoApply: true,
-                            showDropdowns: true,
-                            alwaysShowCalendars: true,
-                            startDate: moment(startDate),
-                            endDate: moment(endDate),
-                            minDate: minDate,
-                            maxDate: maxDate,
-                            opens: 'left',
-                            locale: {
-                                format: 'YYYY-MM-DD'
-                            }
-                        }, function(start, end) {
-                            startDate = start.format('YYYY-MM-DD');
-                            endDate = end.format('YYYY-MM-DD');
-                        });
-                        
-                        // Load models
-                        loadModels();
-                    } else {
-                        showError('Failed to load date range: ' + (data.error || 'Unknown error'));
-                    }
-                })
-                .catch(error => {
-                    hideLoading();
-                    showError('Failed to connect to API: ' + error.message);
-                });
-        }
-
-        // Load available models
-        // Original loadModels replaced
-async function loadModels() {
-            showLoading('Loading models...');
-            
-            fetch('/api/models')
-                .then(response => response.json())
-                .then(data => {
-                    hideLoading();
-                    
-                    if (data.success) {
-                        modelFilter.innerHTML = '<option value="all">All Models</option>';
-                        
-                        data.models.forEach(model => {
-                            const option = document.createElement('option');
-                            option.value = model;
-                            option.textContent = model;
-                            modelFilter.appendChild(option);
-                        });
-                        
-                        // Initial data load
-                        loadData();
-                    } else {
-                        showError('Failed to load models: ' + (data.error || 'Unknown error'));
-                    }
-                })
-                .catch(error => {
-                    hideLoading();
-                    showError('Failed to connect to API: ' + error.message);
-                });
-        }
-
-        // Load token usage data
-        // Original loadData replaced
-async function loadData() {
-            showLoading('Loading token usage data...');
-            
-            const modelSelection = modelFilter.value;
-            
-            const url = `/api/token-data?start_date=${startDate}&end_date=${endDate}&model=${modelSelection}`;
-            
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        updateVisualizations(data);
-                        loadHighCostRecords();
-                    } else {
-                        hideLoading();
-                        showError('Failed to load data: ' + (data.error || 'Unknown error'));
-                    }
-                })
-                .catch(error => {
-                    hideLoading();
-                    showError('Failed to connect to API: ' + error.message);
-                });
-        }
-
-        // Load high cost records
-        // Original loadHighCostRecords replaced
-async function loadHighCostRecords() {
-            showLoading('Loading high-cost records...');
-            
-            const modelSelection = modelFilter.value;
-            
-            const url = `/api/sample-records?start_date=${startDate}&end_date=${endDate}&model=${modelSelection}`;
-            
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    hideLoading();
-                    
-                    if (data.success) {
-                        updateHighCostTable(data.records);
-                    } else {
-                        showError('Failed to load high-cost records: ' + (data.error || 'Unknown error'));
-                    }
-                })
-                .catch(error => {
-                    hideLoading();
-                    showError('Failed to connect to API: ' + error.message);
-                });
-        }
-
-        // Initialize charts
+        // Initialize Charts (Keep this definition here)
         function initCharts() {
-            // Token Usage Chart
-            tokenUsageChart = new Chart(document.getElementById('tokenUsageChart'), {
-                type: 'bar',
-                data: {
-                    labels: [],
-                    datasets: [
-                        {
-                            label: 'Prompt Tokens',
-                            backgroundColor: '#4a6fa5',
+            // Get references to DOM elements inside the function after DOM is loaded
+            const tokenUsageCanvas = document.getElementById('tokenUsageChart');
+            const costCanvas = document.getElementById('costChart');
+            const tokenDistributionCanvas = document.getElementById('tokenDistributionChart');
+            const costEfficiencyCanvas = document.getElementById('costEfficiencyChart');
+            const dailyTokenCanvas = document.getElementById('dailyTokenChart');
+            const dailyCostCanvas = document.getElementById('dailyCostChart');
+            const dailyRequestCanvas = document.getElementById('dailyRequestChart');
+
+            // Check if canvas elements exist before creating charts
+            if (tokenUsageCanvas) {
+                tokenUsageChart = new Chart(tokenUsageCanvas, {
+                    type: 'bar',
+                    data: {
+                        labels: [],
+                        datasets: [
+                            {
+                                label: 'Prompt Tokens',
+                                backgroundColor: '#4a6fa5',
+                                data: []
+                            },
+                            {
+                                label: 'Completion Tokens',
+                                backgroundColor: '#ff9642',
+                                data: []
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Token Usage by Model'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) {
+                                            label += ': ';
+                                        }
+                                        if (context.parsed.y !== null) {
+                                            label += new Intl.NumberFormat().format(context.parsed.y);
+                                        }
+                                        return label;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                stacked: true,
+                                title: {
+                                    display: true,
+                                    text: 'Model'
+                                }
+                            },
+                            y: {
+                                stacked: true,
+                                title: {
+                                    display: true,
+                                    text: 'Number of Tokens'
+                                },
+                                ticks: {
+                                    callback: function(value) {
+                                        return new Intl.NumberFormat().format(value);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else { console.error("Canvas element 'tokenUsageChart' not found."); }
+
+            if (costCanvas) {
+                costChart = new Chart(costCanvas, {
+                    type: 'bar',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Total Cost ($)',
+                            backgroundColor: '#2ca02c',
                             data: []
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Cost by Model'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) {
+                                            label += ': $';
+                                        }
+                                        if (context.parsed.y !== null) {
+                                            label += context.parsed.y.toFixed(2);
+                                        }
+                                        return label;
+                                    }
+                                }
+                            }
                         },
-                        {
-                            label: 'Completion Tokens',
-                            backgroundColor: '#ff9642',
+                        scales: {
+                            y: {
+                                title: {
+                                    display: true,
+                                    text: 'Cost ($)'
+                                },
+                                ticks: {
+                                    callback: function(value) {
+                                        return '$' + value.toFixed(2);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else { console.error("Canvas element 'costChart' not found."); }
+
+            if (tokenDistributionCanvas) {
+                tokenDistributionChart = new Chart(tokenDistributionCanvas, {
+                    type: 'pie',
+                    data: {
+                        labels: ['Prompt Tokens', 'Completion Tokens'],
+                        datasets: [{
+                            label: 'Tokens',
+                            backgroundColor: ['#4a6fa5', '#ff9642'],
+                            data: [0, 0]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Token Distribution'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const label = context.label || '';
+                                        const value = context.raw;
+                                        const total = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                                        const percentage = Math.round((value / total) * 100);
+                                        return `${label}: ${new Intl.NumberFormat().format(value)} (${percentage}%)`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else { console.error("Canvas element 'tokenDistributionChart' not found."); }
+
+            if (costEfficiencyCanvas) {
+                costEfficiencyChart = new Chart(costEfficiencyCanvas, {
+                    type: 'bar',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Cost per 1K Tokens ($)',
+                            backgroundColor: '#d62728',
                             data: []
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: 'Token Usage by Model'
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    let label = context.dataset.label || '';
-                                    if (label) {
-                                        label += ': ';
-                                    }
-                                    if (context.parsed.y !== null) {
-                                        label += new Intl.NumberFormat().format(context.parsed.y);
-                                    }
-                                    return label;
-                                }
-                            }
-                        }
+                        }]
                     },
-                    scales: {
-                        x: {
-                            stacked: true,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
                             title: {
                                 display: true,
-                                text: 'Model'
+                                text: 'Cost per 1K Tokens by Model'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) {
+                                            label += ': $';
+                                        }
+                                        if (context.parsed.y !== null) {
+                                            label += context.parsed.y.toFixed(6);
+                                        }
+                                        return label;
+                                    }
+                                }
                             }
                         },
-                        y: {
-                            stacked: true,
-                            title: {
-                                display: true,
-                                text: 'Number of Tokens'
-                            },
-                            ticks: {
-                                callback: function(value) {
-                                    return new Intl.NumberFormat().format(value);
+                        scales: {
+                            y: {
+                                title: {
+                                    display: true,
+                                    text: 'Cost per 1K Tokens ($)'
+                                },
+                                ticks: {
+                                    callback: function(value) {
+                                        return '$' + value.toFixed(6);
+                                    }
                                 }
                             }
                         }
                     }
-                }
-            });
+                });
+            } else { console.error("Canvas element 'costEfficiencyChart' not found."); }
 
-            // Cost Chart
-            costChart = new Chart(document.getElementById('costChart'), {
-                type: 'bar',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Total Cost ($)',
-                        backgroundColor: '#2ca02c',
-                        data: []
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: 'Cost by Model'
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    let label = context.dataset.label || '';
-                                    if (label) {
-                                        label += ': $';
-                                    }
-                                    if (context.parsed.y !== null) {
-                                        label += context.parsed.y.toFixed(2);
-                                    }
-                                    return label;
-                                }
+            if (dailyTokenCanvas) {
+                dailyTokenChart = new Chart(dailyTokenCanvas, {
+                    type: 'bar',
+                    data: {
+                        labels: [],
+                        datasets: [
+                            {
+                                label: 'Prompt Tokens',
+                                backgroundColor: '#4a6fa5',
+                                data: [],
+                                order: 1
+                            },
+                            {
+                                label: 'Completion Tokens',
+                                backgroundColor: '#ff9642',
+                                data: [],
+                                order: 1
                             }
-                        }
+                        ]
                     },
-                    scales: {
-                        y: {
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
                             title: {
                                 display: true,
-                                text: 'Cost ($)'
+                                text: 'Daily Token Usage'
                             },
-                            ticks: {
-                                callback: function(value) {
-                                    return '$' + value.toFixed(2);
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-
-            // Token Distribution Chart
-            tokenDistributionChart = new Chart(document.getElementById('tokenDistributionChart'), {
-                type: 'pie',
-                data: {
-                    labels: ['Prompt Tokens', 'Completion Tokens'],
-                    datasets: [{
-                        label: 'Tokens',
-                        backgroundColor: ['#4a6fa5', '#ff9642'],
-                        data: [0, 0]
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: 'Token Distribution'
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const label = context.label || '';
-                                    const value = context.raw;
-                                    const total = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
-                                    const percentage = Math.round((value / total) * 100);
-                                    return `${label}: ${new Intl.NumberFormat().format(value)} (${percentage}%)`;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-
-            // Cost Efficiency Chart
-            costEfficiencyChart = new Chart(document.getElementById('costEfficiencyChart'), {
-                type: 'bar',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Cost per 1K Tokens ($)',
-                        backgroundColor: '#d62728',
-                        data: []
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: 'Cost per 1K Tokens by Model'
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    let label = context.dataset.label || '';
-                                    if (label) {
-                                        label += ': $';
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) {
+                                            label += ': ';
+                                        }
+                                        if (context.parsed.y !== null) {
+                                            label += new Intl.NumberFormat().format(context.parsed.y);
+                                        }
+                                        return label;
                                     }
-                                    if (context.parsed.y !== null) {
-                                        label += context.parsed.y.toFixed(6);
-                                    }
-                                    return label;
                                 }
                             }
-                        }
-                    },
-                    scales: {
-                        y: {
-                            title: {
-                                display: true,
-                                text: 'Cost per 1K Tokens ($)'
+                        },
+                        scales: {
+                            x: {
+                                stacked: true,
+                                title: {
+                                    display: true,
+                                    text: 'Date'
+                                }
                             },
-                            ticks: {
-                                callback: function(value) {
-                                    return '$' + value.toFixed(6);
+                            y: {
+                                stacked: true,
+                                title: {
+                                    display: true,
+                                    text: 'Number of Tokens'
+                                },
+                                ticks: {
+                                    callback: function(value) {
+                                        return new Intl.NumberFormat().format(value);
+                                    }
                                 }
                             }
                         }
                     }
-                }
-            });
+                });
+            } else { console.error("Canvas element 'dailyTokenChart' not found."); }
 
-            // Daily Token Chart
-            dailyTokenChart = new Chart(document.getElementById('dailyTokenChart'), {
-                type: 'bar',
-                data: {
-                    labels: [],
-                    datasets: [
-                        {
-                            label: 'Prompt Tokens',
-                            backgroundColor: '#4a6fa5',
+            if (dailyCostCanvas) {
+                dailyCostChart = new Chart(dailyCostCanvas, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Total Cost ($)',
+                            borderColor: '#2ca02c',
+                            backgroundColor: 'rgba(44, 160, 44, 0.2)',
                             data: [],
-                            order: 1
+                            tension: 0.1,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Daily Cost'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) {
+                                            label += ': $';
+                                        }
+                                        if (context.parsed.y !== null) {
+                                            label += context.parsed.y.toFixed(2);
+                                        }
+                                        return label;
+                                    }
+                                }
+                            }
                         },
-                        {
-                            label: 'Completion Tokens',
-                            backgroundColor: '#ff9642',
+                        scales: {
+                            y: {
+                                title: {
+                                    display: true,
+                                    text: 'Cost ($)'
+                                },
+                                ticks: {
+                                    callback: function(value) {
+                                        return '$' + value.toFixed(2);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else { console.error("Canvas element 'dailyCostChart' not found."); }
+
+            if (dailyRequestCanvas) {
+                dailyRequestChart = new Chart(dailyRequestCanvas, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Number of Requests',
+                            borderColor: '#9467bd',
+                            backgroundColor: 'rgba(148, 103, 189, 0.2)',
                             data: [],
-                            order: 1
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: 'Daily Token Usage'
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    let label = context.dataset.label || '';
-                                    if (label) {
-                                        label += ': ';
-                                    }
-                                    if (context.parsed.y !== null) {
-                                        label += new Intl.NumberFormat().format(context.parsed.y);
-                                    }
-                                    return label;
-                                }
-                            }
-                        }
+                            tension: 0.1,
+                            fill: true
+                        }]
                     },
-                    scales: {
-                        x: {
-                            stacked: true,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
                             title: {
                                 display: true,
-                                text: 'Date'
+                                text: 'Daily Requests'
                             }
                         },
-                        y: {
-                            stacked: true,
-                            title: {
-                                display: true,
-                                text: 'Number of Tokens'
-                            },
-                            ticks: {
-                                callback: function(value) {
-                                    return new Intl.NumberFormat().format(value);
-                                }
+                        scales: {
+                            y: {
+                                title: {
+                                    display: true,
+                                    text: 'Number of Requests'
+                                },
+                                beginAtZero: true
                             }
                         }
                     }
-                }
-            });
-
-            // Daily Cost Chart
-            dailyCostChart = new Chart(document.getElementById('dailyCostChart'), {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Total Cost ($)',
-                        borderColor: '#2ca02c',
-                        backgroundColor: 'rgba(44, 160, 44, 0.2)',
-                        data: [],
-                        tension: 0.1,
-                        fill: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: 'Daily Cost'
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    let label = context.dataset.label || '';
-                                    if (label) {
-                                        label += ': $';
-                                    }
-                                    if (context.parsed.y !== null) {
-                                        label += context.parsed.y.toFixed(2);
-                                    }
-                                    return label;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        y: {
-                            title: {
-                                display: true,
-                                text: 'Cost ($)'
-                            },
-                            ticks: {
-                                callback: function(value) {
-                                    return '$' + value.toFixed(2);
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-
-            // Daily Request Chart
-            dailyRequestChart = new Chart(document.getElementById('dailyRequestChart'), {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Number of Requests',
-                        borderColor: '#9467bd',
-                        backgroundColor: 'rgba(148, 103, 189, 0.2)',
-                        data: [],
-                        tension: 0.1,
-                        fill: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: 'Daily Requests'
-                        }
-                    },
-                    scales: {
-                        y: {
-                            title: {
-                                display: true,
-                                text: 'Number of Requests'
-                            },
-                            beginAtZero: true
-                        }
-                    }
-                }
-            });
+                });
+            } else { console.error("Canvas element 'dailyRequestChart' not found."); }
         }
 
         // Format numbers for display
         function formatNumber(num) {
-            return new Intl.NumberFormat().format(Math.round(num));
+            // Handle null/undefined/NaN safely
+            const number = Number(num);
+            return isNaN(number) ? '0' : new Intl.NumberFormat().format(Math.round(number));
         }
 
         function formatCurrency(num) {
-            return '$' + num.toFixed(2);
+            // Handle null/undefined/NaN safely
+            const number = Number(num);
+            return isNaN(number) ? '$0.00' : '$' + number.toFixed(2);
         }
 
         // Update summary stats
         function updateSummaryStats(stats) {
+            if (!stats) return; // Add safety check
             totalRequestsEl.textContent = formatNumber(stats.total_requests);
             totalTokensEl.textContent = formatNumber(stats.total_tokens);
             totalCostEl.textContent = formatCurrency(stats.total_cost);
@@ -1009,6 +882,7 @@ async function loadHighCostRecords() {
 
         // Update token usage chart
         function updateTokenUsageChart(data) {
+            if (!tokenUsageChart || !data) return; // Add safety check
             const models = data.map(item => {
                 const parts = item.model.split('/');
                 return parts.length > 1 ? parts[parts.length - 1] : item.model;
@@ -1024,6 +898,7 @@ async function loadHighCostRecords() {
 
         // Update cost chart
         function updateCostChart(data) {
+            if (!costChart || !data) return; // Add safety check
             const models = data.map(item => {
                 const parts = item.model.split('/');
                 return parts.length > 1 ? parts[parts.length - 1] : item.model;
@@ -1037,15 +912,17 @@ async function loadHighCostRecords() {
 
         // Update token distribution chart
         function updateTokenDistributionChart(stats) {
+            if (!tokenDistributionChart || !stats) return; // Add safety check
             tokenDistributionChart.data.datasets[0].data = [
-                stats.total_prompt_tokens,
-                stats.total_completion_tokens
+                stats.total_prompt_tokens || 0, // Add default values
+                stats.total_completion_tokens || 0
             ];
             tokenDistributionChart.update();
         }
 
         // Update cost efficiency chart
         function updateCostEfficiencyChart(data) {
+            if (!costEfficiencyChart || !data) return; // Add safety check
             const models = data.map(item => {
                 const parts = item.model.split('/');
                 return parts.length > 1 ? parts[parts.length - 1] : item.model;
@@ -1059,6 +936,7 @@ async function loadHighCostRecords() {
 
         // Update daily charts
         function updateDailyCharts(data) {
+            if (!data || data.length === 0) return; // Add safety check
             const dates = data.map(item => item.date);
             const promptTokens = data.map(item => item.prompt_tokens);
             const completionTokens = data.map(item => item.completion_tokens);
@@ -1066,31 +944,38 @@ async function loadHighCostRecords() {
             const requests = data.map(item => item.requests);
             
             // Update token chart
-            dailyTokenChart.data.labels = dates;
-            dailyTokenChart.data.datasets[0].data = promptTokens;
-            dailyTokenChart.data.datasets[1].data = completionTokens;
-            dailyTokenChart.update();
+            if (dailyTokenChart) {
+                dailyTokenChart.data.labels = dates;
+                dailyTokenChart.data.datasets[0].data = promptTokens;
+                dailyTokenChart.data.datasets[1].data = completionTokens;
+                dailyTokenChart.update();
+            }
             
             // Update cost chart
-            dailyCostChart.data.labels = dates;
-            dailyCostChart.data.datasets[0].data = costs;
-            dailyCostChart.update();
+            if (dailyCostChart) {
+                dailyCostChart.data.labels = dates;
+                dailyCostChart.data.datasets[0].data = costs;
+                dailyCostChart.update();
+            }
             
             // Update request chart
-            dailyRequestChart.data.labels = dates;
-            dailyRequestChart.data.datasets[0].data = requests;
-            dailyRequestChart.update();
+            if (dailyRequestChart) {
+                dailyRequestChart.data.labels = dates;
+                dailyRequestChart.data.datasets[0].data = requests;
+                dailyRequestChart.update();
+            }
         }
 
         // Update data table
         function updateDataTable(data) {
+            if (!tableBody || !data) return; // Add safety check
             tableBody.innerHTML = '';
             
             data.forEach(item => {
                 const row = document.createElement('tr');
                 
                 row.innerHTML = `
-                    <td>${item.model}</td>
+                    <td>${item.model || 'N/A'}</td>
                     <td>${formatNumber(item.requests)}</td>
                     <td>${formatNumber(item.prompt_tokens)}</td>
                     <td>${formatNumber(item.completion_tokens)}</td>
@@ -1106,19 +991,20 @@ async function loadHighCostRecords() {
 
         // Update high cost table
         function updateHighCostTable(data) {
+            if (!highCostTableBody || !data) return; // Add safety check
             highCostTableBody.innerHTML = '';
             
             data.forEach(item => {
                 const row = document.createElement('tr');
                 
                 row.innerHTML = `
-                    <td>${item.id}</td>
-                    <td>${item.model}</td>
+                    <td>${item.id || 'N/A'}</td>
+                    <td>${item.model || 'N/A'}</td>
                     <td>${formatNumber(item.prompt_tokens)}</td>
                     <td>${formatNumber(item.completion_tokens)}</td>
                     <td>${formatNumber(item.total_tokens)}</td>
                     <td>${formatCurrency(item.cost)}</td>
-                    <td>${item.datetime}</td>
+                    <td>${item.datetime || 'N/A'}</td>
                 `;
                 
                 highCostTableBody.appendChild(row);
@@ -1127,9 +1013,10 @@ async function loadHighCostRecords() {
 
         // Update all visualizations
         function updateVisualizations(data) {
-            const modelData = data.model_data;
-            const overallStats = data.overall_stats;
-            const dateData = data.date_data;
+            if (!data) return; // Add safety check
+            const modelData = data.model_data || [];
+            const overallStats = data.overall_stats || {};
+            const dateData = data.date_data || [];
             
             updateSummaryStats(overallStats);
             updateTokenUsageChart(modelData);
@@ -1137,798 +1024,356 @@ async function loadHighCostRecords() {
             updateTokenDistributionChart(overallStats);
             updateCostEfficiencyChart(modelData);
             updateDataTable(modelData);
-            
-            if (dateData && dateData.length > 0) {
-                updateDailyCharts(dateData);
-            }
+            updateDailyCharts(dateData);
         }
 
         // Show loading overlay
         function showLoading(message = 'Loading...') {
+            if (!loadingOverlay || !loadingMessage) return; // Add safety check
             loadingMessage.textContent = message;
             loadingOverlay.style.display = 'flex';
         }
 
         // Hide loading overlay
         function hideLoading() {
+            if (!loadingOverlay) return; // Add safety check
             loadingOverlay.style.display = 'none';
         }
 
         // Show error message
         function showError(message) {
+            if (!errorAlert || !errorMessage) return; // Add safety check
             errorMessage.textContent = message;
-            errorAlert.classList.add('show');
-            
+            // Use Bootstrap's API to show the alert if available, otherwise fallback
+            const bsAlert = bootstrap.Alert.getInstance(errorAlert);
+            if (bsAlert) {
+                // If it's already shown, just update text. If not, need to re-enable it.
+                // This part is tricky as Bootstrap removes the element on close.
+                // A simpler approach might be to just ensure it's visible.
+                errorAlert.classList.add('show');
+                errorAlert.style.display = 'block'; // Ensure visibility
+            } else {
+                 // If bootstrap isn't initialized on it, manually show
+                 errorAlert.classList.add('show');
+                 errorAlert.style.display = 'block';
+                 // Initialize Bootstrap alert for the close button to work
+                 new bootstrap.Alert(errorAlert);
+            }
+
             // Auto-hide after 5 seconds
             setTimeout(() => {
-                errorAlert.classList.remove('show');
+                const currentBsAlert = bootstrap.Alert.getInstance(errorAlert);
+                if (currentBsAlert) {
+                    currentBsAlert.close();
+                } else {
+                    errorAlert.classList.remove('show');
+                    errorAlert.style.display = 'none';
+                }
             }, 5000);
         }
 
-        // Event listeners
-        applyFiltersBtn.addEventListener('click', function() {
-            const dateRange = $(dateRangePicker).data('daterangepicker');
-            startDate = dateRange.startDate.format('YYYY-MM-DD');
-            endDate = dateRange.endDate.format('YYYY-MM-DD');
+        // Enhanced error handling for API calls
+        function handleApiError(error, context) {
+            console.error(`${context} error:`, error);
+            let errorMsg = error.message || 'Unknown error';
             
-            loadData();
-        });
+            // Additional debugging information
+            if (error.stack) {
+                console.error('Stack trace:', error.stack);
+            }
+            
+            // Show user-friendly error
+            showError(`${context}: ${errorMsg}`);
+            hideLoading(); // Ensure loading is hidden on error
+        }
 
-        // Initialize
+        // More robust fetch wrapper that handles network errors and JSON parsing
+        async function safeFetch(url, options = {}) {
+            try {
+                const response = await fetch(url, options);
+                
+                if (!response.ok) {
+                    // Try to get error message from response body
+                    let serverErrorMsg = '';
+                    try {
+                        const errorData = await response.json();
+                        serverErrorMsg = errorData.error || JSON.stringify(errorData);
+                    } catch (e) {
+                        serverErrorMsg = await response.text();
+                    }
+                    throw new Error(`Server returned ${response.status}: ${response.statusText}. ${serverErrorMsg}`);
+                }
+                
+                try {
+                    const data = await response.json();
+                    return data;
+                } catch (jsonError) {
+                    throw new Error(`Failed to parse JSON response: ${jsonError.message}`);
+                }
+            } catch (fetchError) {
+                // Catch network errors or errors thrown above
+                throw new Error(`Request failed: ${fetchError.message}`);
+            }
+        }
+
+        // Check database connection on page load
+        async function checkDatabaseConnection() {
+            try {
+                // Use date-range endpoint as a proxy for DB connection check
+                const data = await safeFetch('/api/date-range');
+                
+                if (!data.success) {
+                    // Use the error from the API response if available
+                    showError(`Database connection issue: ${data.error || 'Could not verify connection'}`);
+                    return false;
+                }
+                console.log('Database connection check successful.');
+                return true;
+            } catch (error) {
+                // safeFetch will throw an error for network issues or bad responses
+                handleApiError(error, 'Database connection check');
+                return false;
+            }
+        }
+
+        // Definitive Date Range Picker Initialization
+        async function initDateRangePicker() {
+            showLoading('Checking database connection...');
+            
+            const dbConnected = await checkDatabaseConnection();
+            
+            if (!dbConnected) {
+                hideLoading();
+                // Error message already shown by checkDatabaseConnection
+                return;
+            }
+            
+            showLoading('Loading available date range...');
+            
+            try {
+                const data = await safeFetch('/api/date-range');
+                hideLoading(); // Hide loading after fetch attempt
+                
+                if (data.success) {
+                    // Use defaults if no min/max dates found, or if they are invalid
+                    const minDateMoment = data.min_date ? moment(data.min_date) : moment().subtract(30, 'days');
+                    const maxDateMoment = data.max_date ? moment(data.max_date) : moment();
+
+                    // Validate moments
+                    const minDate = minDateMoment.isValid() ? minDateMoment : moment().subtract(30, 'days');
+                    const maxDate = maxDateMoment.isValid() ? maxDateMoment : moment();
+
+                    console.log('Database date range:', {minDate: minDate.format('YYYY-MM-DD'), maxDate: maxDate.format('YYYY-MM-DD')});
+                    
+                    // Set default selection to last 7 days or available range if shorter
+                    // Ensure start date is not after end date
+                    let defaultStartDate = moment(maxDate).subtract(6, 'days'); // 7 days including today
+                    if (defaultStartDate.isBefore(minDate)) {
+                        defaultStartDate = minDate;
+                    }
+                    
+                    startDate = defaultStartDate.format('YYYY-MM-DD');
+                    endDate = maxDate.format('YYYY-MM-DD');
+                    
+                    // Initialize daterangepicker with more options
+                    $(dateRangePicker).daterangepicker({
+                        startDate: defaultStartDate, // Use moment object
+                        endDate: maxDate,       // Use moment object
+                        minDate: minDate,
+                        maxDate: maxDate,
+                        opens: 'left',
+                        autoApply: true,
+                        showDropdowns: true,
+                        alwaysShowCalendars: true,
+                        ranges: {
+                           'Today': [moment(), moment()],
+                           'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                           'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                           'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+                           'This Month': [moment().startOf('month'), moment().endOf('month')],
+                           'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+                        },
+                        locale: {
+                            format: 'YYYY-MM-DD'
+                        }
+                    }, function(start, end) {
+                        // Update global variables when selection changes
+                        startDate = start.format('YYYY-MM-DD');
+                        endDate = end.format('YYYY-MM-DD');
+                        console.log('Date range selected:', {startDate, endDate});
+                        // Optionally trigger data load on change, or rely on Apply button
+                        // loadData(); // Uncomment if you want auto-refresh on date change
+                    });
+                    
+                    // Load models after date picker is ready
+                    loadModels();
+                } else {
+                    showError('Failed to load date range: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                handleApiError(error, 'Date range initialization');
+            }
+        }
+
+        // Definitive Load Models function
+        async function loadModels() {
+            showLoading('Loading models...');
+            
+            try {
+                const data = await safeFetch('/api/models');
+                hideLoading(); // Hide loading after fetch attempt
+                
+                if (data.success && data.models) {
+                    modelFilter.innerHTML = '<option value="all">All Models</option>'; // Reset options
+                    
+                    data.models.forEach(model => {
+                        const option = document.createElement('option');
+                        option.value = model;
+                        option.textContent = model;
+                        modelFilter.appendChild(option);
+                    });
+                    
+                    // Initial data load now that models and date range are ready
+                    loadData();
+                } else {
+                    showError('Failed to load models: ' + (data.error || 'No models found'));
+                }
+            } catch (error) {
+                handleApiError(error, 'Model loading');
+            }
+        }
+
+        // Definitive Load Data function
+        async function loadData() {
+            showLoading('Loading token usage data...');
+            
+            // Ensure modelFilter has a value, default to 'all' if not
+            const modelSelection = modelFilter ? modelFilter.value : 'all';
+            
+            // Ensure dates are valid
+            if (!startDate || !endDate) {
+                 showError('Invalid date range selected.');
+                 hideLoading();
+                 return;
+            }
+
+            const url = `/api/token-data?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}&model=${encodeURIComponent(modelSelection)}`;
+            console.log('Loading data with URL:', url);
+            
+            try {
+                const data = await safeFetch(url);
+                
+                if (data.success) {
+                    console.log('API data loaded successfully:', {
+                        modelDataCount: data.model_data ? data.model_data.length : 0,
+                        overallStats: data.overall_stats,
+                        dateDataCount: data.date_data ? data.date_data.length : 0
+                    });
+                    
+                    // Update visualizations with potentially empty data if API returns success but no data
+                    updateVisualizations(data);
+                    
+                    // Load high cost records after main data is processed
+                    loadHighCostRecords(); // This will call hideLoading() when done
+                } else {
+                    hideLoading(); // Hide loading if success is false
+                    showError('Failed to load data: ' + (data.error || 'Unknown error'));
+                    // Clear visualizations on data load failure? Optional.
+                    // updateVisualizations({ model_data: [], overall_stats: {}, date_data: [] });
+                }
+            } catch (error) {
+                // safeFetch handles error reporting via handleApiError
+                handleApiError(error, 'Data loading');
+                // Clear visualizations on critical error? Optional.
+                // updateVisualizations({ model_data: [], overall_stats: {}, date_data: [] });
+            }
+        }
+
+        // Definitive Load High Cost Records function
+        async function loadHighCostRecords() {
+            // Don't show separate loading message, assume it's part of main loadData flow
+            // showLoading('Loading high-cost records...'); 
+            
+            const modelSelection = modelFilter ? modelFilter.value : 'all';
+            
+            // Ensure dates are valid
+            if (!startDate || !endDate) {
+                 console.warn('Skipping high-cost records load due to invalid date range.');
+                 hideLoading(); // Ensure loading is hidden if we skip
+                 return;
+            }
+
+            const url = `/api/sample-records?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}&model=${encodeURIComponent(modelSelection)}`;
+            console.log('Loading high-cost records with URL:', url);
+
+            try {
+                const data = await safeFetch(url);
+                hideLoading(); // Hide loading after this final fetch in the sequence
+                
+                if (data.success && data.records) {
+                    updateHighCostTable(data.records);
+                } else {
+                    // Don't necessarily show an error if high-cost records fail, could be less critical
+                    console.warn('Failed to load high-cost records: ' + (data.error || 'No records found or error'));
+                    updateHighCostTable([]); // Clear the table on failure
+                }
+            } catch (error) {
+                hideLoading(); // Ensure loading is hidden on error
+                // Don't necessarily show a blocking error, just log it
+                console.error('High-cost records loading error:', error);
+                updateHighCostTable([]); // Clear the table on error
+                // Optionally show a non-blocking warning:
+                // showError('Warning: Could not load high-cost records. ' + error.message);
+            }
+        }
+
+        // Initialize Application on DOMContentLoaded
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM fully loaded and parsed');
+
+            // Get references to DOM elements
+            dateRangePicker = document.getElementById('dateRangePicker');
+            modelFilter = document.getElementById('modelFilter');
+            applyFiltersBtn = document.getElementById('applyFilters');
+            loadingOverlay = document.getElementById('loadingOverlay');
+            loadingMessage = document.getElementById('loadingMessage');
+            errorAlert = document.getElementById('errorAlert');
+            errorMessage = document.getElementById('errorMessage');
+            totalRequestsEl = document.getElementById('totalRequests');
+            totalTokensEl = document.getElementById('totalTokens');
+            totalCostEl = document.getElementById('totalCost');
+            avgCostEl = document.getElementById('avgCost');
+            tableBody = document.getElementById('tableBody');
+            highCostTableBody = document.getElementById('highCostTableBody');
+
+            // Check if all essential elements were found
+            if (!dateRangePicker || !modelFilter || !applyFiltersBtn || !loadingOverlay || !errorAlert) {
+                console.error('Essential UI elements not found! Dashboard may not function correctly.');
+                // Display a critical error message to the user
+                const body = document.querySelector('body');
+                if (body) {
+                    body.innerHTML = '<div class="alert alert-danger" role="alert">Critical Error: Dashboard UI elements are missing. Please check the HTML structure or contact support.</div>' + body.innerHTML;
+                }
+                return; // Stop initialization
+            }
+
             // Initialize charts
             initCharts();
             
-            // Initialize date range picker
-            setTimeout(initDateRangePicker, 100);
+            // Setup Apply Filters button listener
+            applyFiltersBtn.addEventListener('click', function() {
+                console.log('Apply Filters button clicked');
+                // Date range is updated by the daterangepicker callback
+                // Model is read directly from the select element
+                loadData(); // Trigger data reload with current filter values
+            });
+
+            // Initialize date range picker (which triggers model load and initial data load)
+            // Use a small timeout to ensure libraries are fully ready
+            setTimeout(initDateRangePicker, 100); 
         });
+
     </script>
 
-// Add this before the closing 
-<script>
-// Enhanced event handling for filters
-document.addEventListener('DOMContentLoaded', function() {
-    // Ensure we have the elements
-    const modelFilter = document.getElementById('modelFilter');
-    const applyFiltersBtn = document.getElementById('applyFilters');
-    
-    if (!modelFilter || !applyFiltersBtn) {
-        console.error('Could not find filter elements!');
-        return;
-    }
-    
-    console.log('Setting up enhanced filter event handlers');
-    
-    // Add change event logging for debugging
-    modelFilter.addEventListener('change', function() {
-        console.log('Model filter changed to:', this.value);
-    });
-    
-    // Replace the click handler for Apply Filters button
-    // Remove any existing event listeners first (if possible)
-    applyFiltersBtn.replaceWith(applyFiltersBtn.cloneNode(true));
-    
-    // Get the fresh button reference and add a new listener
-    const freshApplyBtn = document.getElementById('applyFilters');
-    freshApplyBtn.addEventListener('click', function() {
-        console.log('Apply Filters button clicked');
-        console.log('Current model filter:', modelFilter.value);
-        
-        // Get the current date range
-        const dateRange = $(dateRangePicker).data('daterangepicker');
-        if (!dateRange) {
-            console.error('Could not get daterangepicker data!');
-            showError('Date range picker is not initialized properly.');
-            return;
-        }
-        
-        startDate = dateRange.startDate.format('YYYY-MM-DD');
-        endDate = dateRange.endDate.format('YYYY-MM-DD');
-        
-        console.log('Applying filters with:', { 
-            startDate, 
-            endDate, 
-            modelFilter: modelFilter.value 
-        });
-        
-        // Force clear any previous data
-        updateSummaryStats({
-            total_requests: 0,
-            total_prompt_tokens: 0,
-            total_completion_tokens: 0,
-            total_tokens: 0,
-            total_cost: 0,
-            avg_cost_per_request: 0
-        });
-        
-        tokenUsageChart.data.labels = [];
-        tokenUsageChart.data.datasets[0].data = [];
-        tokenUsageChart.data.datasets[1].data = [];
-        tokenUsageChart.update();
-        
-        costChart.data.labels = [];
-        costChart.data.datasets[0].data = [];
-        costChart.update();
-        
-        tokenDistributionChart.data.datasets[0].data = [0, 0];
-        tokenDistributionChart.update();
-        
-        costEfficiencyChart.data.labels = [];
-        costEfficiencyChart.data.datasets[0].data = [];
-        costEfficiencyChart.update();
-        
-        // Clear tables
-        tableBody.innerHTML = '';
-        highCostTableBody.innerHTML = '';
-        
-        // Load the filtered data
-        loadData();
-    });
-    
-    console.log('Enhanced event handlers set up successfully');
-});
-
-// Replace the loadData function to ensure model filtering works correctly
-async function enhancedLoadData() {
-    showLoading('Loading token usage data...');
-    
-    const modelSelection = modelFilter.value;
-    
-    const url = `/api/token-data?start_date=${startDate}&end_date=${endDate}&model=${encodeURIComponent(modelSelection)}`;
-    console.log('Loading data with URL:', url);
-    
-    try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            console.log('API data loaded successfully:', {
-                modelDataCount: data.model_data.length,
-                overallStats: data.overall_stats,
-                dateDataCount: data.date_data.length,
-                modelFilter: modelSelection
-            });
-            
-            updateVisualizations(data);
-            loadHighCostRecords();
-        } else {
-            hideLoading();
-            showError('Failed to load data: ' + (data.error || 'Unknown error'));
-        }
-    } catch (error) {
-        hideLoading();
-        console.error('Error loading data:', error);
-        showError('Failed to load data: ' + error.message);
-    }
-}
-
-// Enhanced loadHighCostRecords function
-async function enhancedLoadHighCostRecords() {
-    showLoading('Loading high-cost records...');
-    
-    const modelSelection = modelFilter.value;
-    
-    const url = `/api/sample-records?start_date=${startDate}&end_date=${endDate}&model=${encodeURIComponent(modelSelection)}`;
-    console.log('Loading high-cost records with URL:', url);
-    
-    try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        
-        hideLoading();
-        
-        if (data.success) {
-            console.log('Received high-cost records:', data.records.length);
-            updateHighCostTable(data.records);
-        } else {
-            showError('Failed to load high-cost records: ' + (data.error || 'Unknown error'));
-        }
-    } catch (error) {
-        hideLoading();
-        console.error('Error loading high-cost records:', error);
-        showError('Failed to load high-cost records: ' + error.message);
-    }
-}
-
-// Replace the original functions with our enhanced versions
-window.addEventListener('load', function() {
-    console.log('Applying model filter fixes');
-    window.loadData = enhancedLoadData;
-    window.loadHighCostRecords = enhancedLoadHighCostRecords;
-});
-
-</script>
-
-<script>
-// Complete replacement for the critical functions
-// This bypasses any issues with function overriding or previous implementations
-
-// Reset all visualizations and then reload data
-function clearAndReloadData() {
-    console.log('Clearing visualizations and reloading data');
-    
-    // Clear summary stats
-    document.getElementById('totalRequests').textContent = '0';
-    document.getElementById('totalTokens').textContent = '0';
-    document.getElementById('totalCost').textContent = '$0.00';
-    document.getElementById('avgCost').textContent = '$0.00';
-    
-    // Clear charts
-    if (tokenUsageChart) {
-        tokenUsageChart.data.labels = [];
-        tokenUsageChart.data.datasets[0].data = [];
-        tokenUsageChart.data.datasets[1].data = [];
-        tokenUsageChart.update();
-    }
-    
-    if (costChart) {
-        costChart.data.labels = [];
-        costChart.data.datasets[0].data = [];
-        costChart.update();
-    }
-    
-    if (tokenDistributionChart) {
-        tokenDistributionChart.data.datasets[0].data = [0, 0];
-        tokenDistributionChart.update();
-    }
-    
-    if (costEfficiencyChart) {
-        costEfficiencyChart.data.labels = [];
-        costEfficiencyChart.data.datasets[0].data = [];
-        costEfficiencyChart.update();
-    }
-    
-    // Clear daily charts
-    if (dailyTokenChart) {
-        dailyTokenChart.data.labels = [];
-        dailyTokenChart.data.datasets[0].data = [];
-        dailyTokenChart.data.datasets[1].data = [];
-        dailyTokenChart.update();
-    }
-    
-    if (dailyCostChart) {
-        dailyCostChart.data.labels = [];
-        dailyCostChart.data.datasets[0].data = [];
-        dailyCostChart.update();
-    }
-    
-    if (dailyRequestChart) {
-        dailyRequestChart.data.labels = [];
-        dailyRequestChart.data.datasets[0].data = [];
-        dailyRequestChart.update();
-    }
-    
-    // Clear tables
-    document.getElementById('tableBody').innerHTML = '';
-    document.getElementById('highCostTableBody').innerHTML = '';
-    
-    // Reload data
-    directLoadData();
-}
-
-// Direct implementation of loadData that doesn't rely on any previous version
-async function directLoadData() {
-    showLoading('Loading token usage data...');
-    
-    const modelFilter = document.getElementById('modelFilter');
-    const dateRangePicker = document.getElementById('dateRangePicker');
-    
-    // Get model selection
-    const modelSelection = modelFilter ? modelFilter.value : 'all';
-    
-    // Get date range
-    let startDate, endDate;
-    try {
-        const dateRange = $(dateRangePicker).data('daterangepicker');
-        startDate = dateRange.startDate.format('YYYY-MM-DD');
-        endDate = dateRange.endDate.format('YYYY-MM-DD');
-    } catch (error) {
-        console.error('Error getting date range:', error);
-        hideLoading();
-        showError('Could not get date range. Please try refreshing the page.');
-        return;
-    }
-    
-    const url = `/api/token-data?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}&model=${encodeURIComponent(modelSelection)}`;
-    console.log('Loading data with URL:', url);
-    
-    try {
-        // Make the API request
-        const response = await fetch(url);
-        const data = await response.json();
-        
-        console.log('API response:', data);
-        
-        if (data.success) {
-            // Update visualizations with the new data
-            directUpdateVisualizations(data);
-            
-            // Load high-cost records
-            directLoadHighCostRecords();
-        } else {
-            hideLoading();
-            showError('Failed to load data: ' + (data.error || 'Unknown error'));
-        }
-    } catch (error) {
-        hideLoading();
-        console.error('Error loading data:', error);
-        showError('Failed to load data: ' + error.message);
-    }
-}
-
-// Direct implementation of updateVisualizations
-function directUpdateVisualizations(data) {
-    const modelData = data.model_data || [];
-    const overallStats = data.overall_stats || {
-        total_requests: 0,
-        total_prompt_tokens: 0,
-        total_completion_tokens: 0,
-        total_tokens: 0,
-        total_cost: 0,
-        avg_cost_per_request: 0
-    };
-    const dateData = data.date_data || [];
-    
-    console.log('Updating visualizations with:', {
-        modelData: modelData.length + ' records',
-        overallStats,
-        dateData: dateData.length + ' records'
-    });
-    
-    // Update summary stats
-    document.getElementById('totalRequests').textContent = formatNumber(overallStats.total_requests);
-    document.getElementById('totalTokens').textContent = formatNumber(overallStats.total_tokens);
-    document.getElementById('totalCost').textContent = formatCurrency(overallStats.total_cost);
-    document.getElementById('avgCost').textContent = formatCurrency(overallStats.avg_cost_per_request);
-    
-    // Update token usage chart
-    if (tokenUsageChart) {
-        const models = modelData.map(item => {
-            const parts = item.model.split('/');
-            return parts.length > 1 ? parts[parts.length - 1] : item.model;
-        });
-        const promptTokens = modelData.map(item => item.prompt_tokens);
-        const completionTokens = modelData.map(item => item.completion_tokens);
-        
-        tokenUsageChart.data.labels = models;
-        tokenUsageChart.data.datasets[0].data = promptTokens;
-        tokenUsageChart.data.datasets[1].data = completionTokens;
-        tokenUsageChart.update();
-    }
-    
-    // Update cost chart
-    if (costChart) {
-        const models = modelData.map(item => {
-            const parts = item.model.split('/');
-            return parts.length > 1 ? parts[parts.length - 1] : item.model;
-        });
-        const costs = modelData.map(item => item.total_cost);
-        
-        costChart.data.labels = models;
-        costChart.data.datasets[0].data = costs;
-        costChart.update();
-    }
-    
-    // Update token distribution chart
-    if (tokenDistributionChart) {
-        tokenDistributionChart.data.datasets[0].data = [
-            overallStats.total_prompt_tokens,
-            overallStats.total_completion_tokens
-        ];
-        tokenDistributionChart.update();
-    }
-    
-    // Update cost efficiency chart
-    if (costEfficiencyChart) {
-        const models = modelData.map(item => {
-            const parts = item.model.split('/');
-            return parts.length > 1 ? parts[parts.length - 1] : item.model;
-        });
-        const costPer1kTokens = modelData.map(item => item.cost_per_1k_tokens);
-        
-        costEfficiencyChart.data.labels = models;
-        costEfficiencyChart.data.datasets[0].data = costPer1kTokens;
-        costEfficiencyChart.update();
-    }
-    
-    // Update daily charts
-    if (dateData && dateData.length > 0) {
-        // Update token chart
-        if (dailyTokenChart) {
-            const dates = dateData.map(item => item.date);
-            const promptTokens = dateData.map(item => item.prompt_tokens);
-            const completionTokens = dateData.map(item => item.completion_tokens);
-            
-            dailyTokenChart.data.labels = dates;
-            dailyTokenChart.data.datasets[0].data = promptTokens;
-            dailyTokenChart.data.datasets[1].data = completionTokens;
-            dailyTokenChart.update();
-        }
-        
-        // Update cost chart
-        if (dailyCostChart) {
-            const dates = dateData.map(item => item.date);
-            const costs = dateData.map(item => item.total_cost);
-            
-            dailyCostChart.data.labels = dates;
-            dailyCostChart.data.datasets[0].data = costs;
-            dailyCostChart.update();
-        }
-        
-        // Update request chart
-        if (dailyRequestChart) {
-            const dates = dateData.map(item => item.date);
-            const requests = dateData.map(item => item.requests);
-            
-            dailyRequestChart.data.labels = dates;
-            dailyRequestChart.data.datasets[0].data = requests;
-            dailyRequestChart.update();
-        }
-    }
-    
-    // Update data table
-    const tableBody = document.getElementById('tableBody');
-    if (tableBody) {
-        tableBody.innerHTML = '';
-        
-        modelData.forEach(item => {
-            const row = document.createElement('tr');
-            
-            row.innerHTML = `
-                <td>${item.model}</td>
-                <td>${formatNumber(item.requests)}</td>
-                <td>${formatNumber(item.prompt_tokens)}</td>
-                <td>${formatNumber(item.completion_tokens)}</td>
-                <td>${formatNumber(item.total_tokens)}</td>
-                <td>${formatCurrency(item.total_cost)}</td>
-                <td>${formatCurrency(item.avg_cost_per_request)}</td>
-                <td>${formatCurrency(item.cost_per_1k_tokens)}</td>
-            `;
-            
-            tableBody.appendChild(row);
-        });
-    }
-    
-    hideLoading();
-}
-
-// Direct implementation of loadHighCostRecords
-async function directLoadHighCostRecords() {
-    showLoading('Loading high-cost records...');
-    
-    const modelFilter = document.getElementById('modelFilter');
-    const dateRangePicker = document.getElementById('dateRangePicker');
-    
-    // Get model selection
-    const modelSelection = modelFilter ? modelFilter.value : 'all';
-    
-    // Get date range
-    let startDate, endDate;
-    try {
-        const dateRange = $(dateRangePicker).data('daterangepicker');
-        startDate = dateRange.startDate.format('YYYY-MM-DD');
-        endDate = dateRange.endDate.format('YYYY-MM-DD');
-    } catch (error) {
-        console.error('Error getting date range:', error);
-        hideLoading();
-        showError('Could not get date range. Please try refreshing the page.');
-        return;
-    }
-    
-    const url = `/api/sample-records?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}&model=${encodeURIComponent(modelSelection)}`;
-    console.log('Loading high-cost records with URL:', url);
-    
-    try {
-        const response = await fetch(url);
-        const data = await response.json();
-        
-        hideLoading();
-        
-        if (data.success) {
-            const records = data.records || [];
-            console.log('Received high-cost records:', records.length);
-            
-            // Update high cost table
-            const highCostTableBody = document.getElementById('highCostTableBody');
-            if (highCostTableBody) {
-                highCostTableBody.innerHTML = '';
-                
-                records.forEach(item => {
-                    const row = document.createElement('tr');
-                    
-                    row.innerHTML = `
-                        <td>${item.id}</td>
-                        <td>${item.model}</td>
-                        <td>${formatNumber(item.prompt_tokens)}</td>
-                        <td>${formatNumber(item.completion_tokens)}</td>
-                        <td>${formatNumber(item.total_tokens)}</td>
-                        <td>${formatCurrency(item.cost)}</td>
-                        <td>${item.datetime}</td>
-                    `;
-                    
-                    highCostTableBody.appendChild(row);
-                });
-            }
-        } else {
-            showError('Failed to load high-cost records: ' + (data.error || 'Unknown error'));
-        }
-    } catch (error) {
-        hideLoading();
-        console.error('Error loading high-cost records:', error);
-        showError('Failed to load high-cost records: ' + error.message);
-    }
-}
-
-// Format helpers (in case they're not working correctly elsewhere)
-function formatNumber(num) {
-    return new Intl.NumberFormat().format(Math.round(num || 0));
-}
-
-function formatCurrency(num) {
-    return '$' + (num || 0).toFixed(2);
-}
-
-// Setup filter event handler
-document.addEventListener('DOMContentLoaded', function() {
-    // Get references to UI elements
-    const modelFilter = document.getElementById('modelFilter');
-    const applyFiltersBtn = document.getElementById('applyFilters');
-    
-    if (!applyFiltersBtn) {
-        console.error('Could not find Apply Filters button!');
-        return;
-    }
-    
-    console.log('Setting up completely new filter handler');
-    
-    // Replace the Apply Filters button with a clone to remove any existing handlers
-    const newButton = applyFiltersBtn.cloneNode(true);
-    applyFiltersBtn.parentNode.replaceChild(newButton, applyFiltersBtn);
-    
-    // Add a new click handler
-    newButton.addEventListener('click', function(event) {
-        event.preventDefault();
-        console.log('Apply Filters button clicked (new handler)');
-        clearAndReloadData();
-    });
-    
-    console.log('New filter handler set up successfully');
-});
-
-// Clean startup
-window.addEventListener('load', function() {
-    console.log('Window loaded, setting up direct functions');
-    window.originalLoadData = window.loadData;
-    window.originalLoadHighCostRecords = window.loadHighCostRecords;
-    
-    // Replace the functions with our direct versions
-    window.loadData = directLoadData;
-    window.loadHighCostRecords = directLoadHighCostRecords;
-    
-    // Add a global diagnostic function
-    window.fixFiltering = function() {
-        console.log('Manual filter fix applied');
-        clearAndReloadData();
-    };
-    
-    // Start logging events
-    console.log('Patched functions set up - use window.fixFiltering() to manually force refresh if needed');
-});
-
-</script>
-
-<script src="model-filter-fix.js"></script>
-</body> tag in index.html
-// Enhanced error handling for API calls
-function handleApiError(error, context) {
-    console.error(`${context} error:`, error);
-    let errorMsg = error.message || 'Unknown error';
-    
-    // Additional debugging information
-    if (error.stack) {
-        console.error('Stack trace:', error.stack);
-    }
-    
-    // Show user-friendly error
-    showError(`${context}: ${errorMsg}`);
-    hideLoading();
-}
-
-// More robust fetch wrapper that handles network errors and JSON parsing
-async function safeFetch(url, options = {}) {
-    try {
-        const response = await fetch(url, options);
-        
-        if (!response.ok) {
-            throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-        }
-        
-        try {
-            const data = await response.json();
-            return data;
-        } catch (jsonError) {
-            throw new Error(`Failed to parse JSON response: ${jsonError.message}`);
-        }
-    } catch (fetchError) {
-        throw new Error(`Network request failed: ${fetchError.message}`);
-    }
-}
-
-// Check database connection on page load
-async function checkDatabaseConnection() {
-    try {
-        const data = await safeFetch('/api/date-range');
-        
-        if (!data.success) {
-            showError(`Database connection issue: ${data.error || 'Unknown error'}`);
-            return false;
-        }
-        return true;
-    } catch (error) {
-        handleApiError(error, 'Database connection check');
-        return false;
-    }
-}
-
-// Update the date range picker initialization
-async function initDateRangePicker() {
-    showLoading('Checking database connection...');
-    
-    const dbConnected = await checkDatabaseConnection();
-    
-    if (!dbConnected) {
-        hideLoading();
-        showError('Could not connect to the database. Please check server logs.');
-        return;
-    }
-    
-    showLoading('Loading available date range...');
-    
-    try {
-        const data = await safeFetch('/api/date-range');
-        
-        hideLoading();
-        
-        if (data.success) {
-            // Use defaults if no min/max dates found
-            const minDate = data.min_date ? moment(data.min_date) : moment().subtract(30, 'days');
-            const maxDate = data.max_date ? moment(data.max_date) : moment();
-            
-            console.log('Database date range:', {minDate: minDate.format('YYYY-MM-DD'), maxDate: maxDate.format('YYYY-MM-DD')});
-            
-            // Set default selection to last 7 days or available range if shorter
-            startDate = moment(maxDate).subtract(7, 'days').isBefore(minDate) 
-                ? minDate.format('YYYY-MM-DD')
-                : moment(maxDate).subtract(7, 'days').format('YYYY-MM-DD');
-            endDate = maxDate.format('YYYY-MM-DD');
-            
-            // Initialize daterangepicker with more options
-            $(dateRangePicker).daterangepicker({
-                startDate: moment(startDate),
-                endDate: moment(endDate),
-                minDate: minDate,
-                maxDate: maxDate,
-                opens: 'left',
-                autoApply: true,
-                showDropdowns: true,
-                alwaysShowCalendars: true,
-                ranges: {
-                   'Today': [moment(), moment()],
-                   'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
-                   'Last 7 Days': [moment().subtract(6, 'days'), moment()],
-                   'Last 30 Days': [moment().subtract(29, 'days'), moment()],
-                   'This Month': [moment().startOf('month'), moment().endOf('month')],
-                   'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
-                },
-                locale: {
-                    format: 'YYYY-MM-DD'
-                }
-            }, function(start, end) {
-                startDate = start.format('YYYY-MM-DD');
-                endDate = end.format('YYYY-MM-DD');
-                console.log('Date range selected:', {startDate, endDate});
-            });
-            
-            // Load models
-            loadModels();
-        } else {
-            showError('Failed to load date range: ' + (data.error || 'Unknown error'));
-        }
-    } catch (error) {
-        handleApiError(error, 'Date range initialization');
-    }
-}
-
-// Update the loadModels function
-async function loadModels() {
-    showLoading('Loading models...');
-    
-    try {
-        const data = await safeFetch('/api/models');
-        
-        hideLoading();
-        
-        if (data.success) {
-            modelFilter.innerHTML = '<option value="all">All Models</option>';
-            
-            data.models.forEach(model => {
-                const option = document.createElement('option');
-                option.value = model;
-                option.textContent = model;
-                modelFilter.appendChild(option);
-            });
-            
-            // Initial data load
-            loadData();
-        } else {
-            showError('Failed to load models: ' + (data.error || 'Unknown error'));
-        }
-    } catch (error) {
-        handleApiError(error, 'Model loading');
-    }
-}
-
-// Update the loadData function
-async function loadData() {
-    showLoading('Loading token usage data...');
-    
-    const modelSelection = modelFilter.value;
-    
-    const url = `/api/token-data?start_date=${startDate}&end_date=${endDate}&model=${modelSelection}`;
-    console.log('Loading data with URL:', url);
-    
-    try {
-        const data = await safeFetch(url);
-        
-        if (data.success) {
-            console.log('API data loaded successfully:', {
-                modelDataCount: data.model_data.length,
-                overallStats: data.overall_stats,
-                dateDataCount: data.date_data.length
-            });
-            
-            updateVisualizations(data);
-            loadHighCostRecords();
-        } else {
-            hideLoading();
-            showError('Failed to load data: ' + (data.error || 'Unknown error'));
-        }
-    } catch (error) {
-        handleApiError(error, 'Data loading');
-    }
-}
-
-// Update the loadHighCostRecords function
-async function loadHighCostRecords() {
-    showLoading('Loading high-cost records...');
-    
-    const modelSelection = modelFilter.value;
-    
-    const url = `/api/sample-records?start_date=${startDate}&end_date=${endDate}&model=${modelSelection}`;
-    
-    try {
-        const data = await safeFetch(url);
-        
-        hideLoading();
-        
-        if (data.success) {
-            updateHighCostTable(data.records);
-        } else {
-            showError('Failed to load high-cost records: ' + (data.error || 'Unknown error'));
-        }
-    } catch (error) {
-        handleApiError(error, 'High-cost records loading');
-    }
-}
-
-</script>
 </body>
 </html>
